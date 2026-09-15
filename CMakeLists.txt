@@ -3,7 +3,7 @@ project(time_sync_neo CXX)
 
 # The Dusklight version to build against: a release tag (e.g. "v1.5.0") or a commit SHA.
 if (NOT DUSKLIGHT_VERSION)
-    set(DUSKLIGHT_VERSION "5a4e6f3254b7b463a4667cc2796c6e617a6b8a8d")
+    set(DUSKLIGHT_VERSION "07b2f5accf96d9e59dde91741781a3511598a84c")
 endif ()
 # Fetches the Dusklight sources into ./dusklight and provides DUSKLIGHT_DIR.
 # Use -DDUSKLIGHT_DIR= to point at an existing Dusklight checkout.

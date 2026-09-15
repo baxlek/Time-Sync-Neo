@@ -1,4 +1,4 @@
-#include "mods/hook.hpp"
+#include "mods/svc/hook.hpp"
 #include "mods/service.hpp"
 #include "mods/svc/config.h"
 #include "mods/svc/hook.h"

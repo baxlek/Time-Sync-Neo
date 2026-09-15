@@ -3,3 +3,7 @@
 /dusklight/
 .idea/
 .DS_Store
+.vs/
+.vscode/
+.idea/
+out/
