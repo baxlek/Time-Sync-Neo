@@ -1,8 +1,6 @@
 #include "mods/svc/hook.hpp"
 #include "mods/service.hpp"
-#include "mods/svc/config.h"
 #include "mods/svc/log.h"
-#include "mods/svc/ui.h"
 
 #include "d/actor/d_a_demo00.h"
 #include "d/actor/d_a_kytag11.h"
@@ -18,8 +16,6 @@ DEFINE_MOD();
 
 IMPORT_SERVICE(LogService, svc_log);
 IMPORT_SERVICE(HookService, svc_hook);
-IMPORT_SERVICE(ConfigService, svc_config);
-IMPORT_SERVICE(UiService, svc_ui);
 
 DEFINE_HOOK(&dScnKy_env_light_c::setDaytime, SetDaytime);
 DEFINE_HOOK(&daDemo00_c::actPerformance, ActPerformance);
@@ -28,18 +24,6 @@ DEFINE_HOOK(&dKy_instant_timechg, InstantTimechg);
 DEFINE_HOOK_SYMBOL("dKy_Create", int(void*), KankyoCreate);
 // daKytag11_Execute is a file-local static in d_a_kytag11.cpp; hook by symbol name.
 DEFINE_HOOK_SYMBOL("daKytag11_Execute", int(fopAc_ac_c*), Kytag11Execute);
-
-static ConfigVarHandle g_cvar_enabled = 0;
-
-static bool is_mod_enabled() {
-    bool enabled = true;
-    if (g_cvar_enabled != 0 &&
-        svc_config->get_bool(mod_ctx, g_cvar_enabled, &enabled) == MOD_OK)
-    {
-        return enabled;
-    }
-    return true;
-}
 
 static bool should_sync_time(dScnKy_env_light_c* env_light) {
     if (dKy_darkworld_check()) {
@@ -67,7 +51,7 @@ static f32 compute_wall_clock_daytime() {
 
 static void on_set_daytime_post(ModContext*, void* args, void*, void*) {
     dScnKy_env_light_c* env_light = mods::arg<dScnKy_env_light_c*>(args, 0);
-    if (env_light == nullptr || !is_mod_enabled()) {
+    if (env_light == nullptr || !should_sync_time(env_light)) {
         return;
     }
 
@@ -218,37 +202,9 @@ static void on_kytag11_execute_post(ModContext*, void*, void*, void*) {
     }
 }
 
-static ModResult build_panel(ModContext*, UiElementHandle panel, void*, ModError*) {
-    UiControlDesc control = UI_CONTROL_DESC_INIT;
-    control.kind = UI_CONTROL_TOGGLE;
-    control.label = "Enabled";
-    control.binding = UI_BINDING_CONFIG_VAR;
-    control.config_var = g_cvar_enabled;
-    return svc_ui->pane_add_control(mod_ctx, panel, &control, nullptr);
-}
-
 extern "C" {
 MOD_EXPORT ModResult mod_initialize(ModError*) {
-    ConfigVarDesc enabled_desc = CONFIG_VAR_DESC_INIT;
-    enabled_desc.name = "modEnabled";
-    enabled_desc.type = CONFIG_VAR_BOOL;
-    enabled_desc.default_bool = false;
-
-    ModResult result = svc_config->register_var(mod_ctx, &enabled_desc, &g_cvar_enabled);
-    if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to register enabled cvar");
-        return result;
-    }
-
-    UiModsPanelDesc panel_desc = UI_MODS_PANEL_DESC_INIT;
-    panel_desc.build = build_panel;
-    result = svc_ui->register_mods_panel(mod_ctx, &panel_desc);
-    if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to register mod panel");
-        return result;
-    }
-
-    result = mods::hook::add_post<SetDaytime>(mod_ctx, on_set_daytime_post);
+    ModResult result = mods::hook_add_post<SetDaytime>(svc_hook, on_set_daytime_post);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_set_daytime_post");
         return result;
@@ -256,25 +212,25 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
 
     // Install the POST hook before the PRE hook: if POST fails, PRE is never
     // registered, so field_0x6b8 can never be zeroed without being restored.
-    result = mods::hook::add_post<ActPerformance>(mod_ctx, on_act_performance_post);
+    result = mods::hook::add_post<ActPerformance>(on_act_performance_post);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_act_performance_post");
         return result;
     }
 
-    result = mods::hook::add_pre<ActPerformance>(mod_ctx, on_act_performance_pre);
+    result = mods::hook::add_pre<ActPerformance>(on_act_performance_pre);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_act_performance_pre");
         return result;
     }
 
-    result = mods::hook::add_pre<InstantTimechg>(mod_ctx, on_instant_timechg_pre);
+    result = mods::hook::add_pre<InstantTimechg>(on_instant_timechg_pre);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_instant_timechg_pre");
         return result;
     }
 
-    result = mods::hook::add_post<KankyoCreate>(mod_ctx, on_kankyo_create_post);
+    result = mods::hook::add_post<KankyoCreate>(on_kankyo_create_post);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_kankyo_create_post");
         return result;
@@ -282,13 +238,13 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
 
     // Install the POST hook before the PRE hook: if POST fails, PRE is never
     // registered, so mNewTime/mEnvTime can never be zeroed without being restored.
-    result = mods::hook::add_post<Kytag11Execute>(mod_ctx, on_kytag11_execute_post);
+    result = mods::hook::add_post<Kytag11Execute>(on_kytag11_execute_post);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_kytag11_execute_post");
         return result;
     }
 
-    result = mods::hook::add_pre<Kytag11Execute>(mod_ctx, on_kytag11_execute_pre);
+    result = mods::hook::add_pre<Kytag11Execute>(on_kytag11_execute_pre);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_kytag11_execute_pre");
         return result;
