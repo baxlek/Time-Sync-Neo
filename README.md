@@ -1,64 +1,27 @@
-# Dusklight Mod Template
+# Time Sync Neo
 
-A standalone template for [Dusklight](https://github.com/TwilitRealm/dusklight) mods.
+A fully vibe-coded standalone mod for [Dusklight](https://github.com/TwilitRealm/dusklight).
 
-See the [Dusklight modding documentation](https://github.com/TwilitRealm/dusklight/blob/main/docs/modding.md)
-for the full mod API: services, hooking game functions, asset overlays, and more.
+Synchronizes in-game time with real-world time.
 
-## Quick start
+A port of the "[Ship of Harkinian](https://github.com/HarbourMasters/Shipwright)" 'Time Sync' option.
 
-1. Click "Use this template" to create a new repository for your mod.
-2. Edit `mod.json`: set your mod's `id` (reverse-DNS style, e.g. `com.example.my_mod`),
-   `name`, `author`, and `description`.
-3. Rename the target in `CMakeLists.txt` (`add_mod(my_mod ...)`) (this names the `.dusk` file).
-4. Write your mod in `src/mod.cpp`.
-5. Build locally:
-   ```sh
-   cmake -B build
-   cmake --build build
-   ```
+Based off of the currently unmerged "[System Time Sync](https://github.com/TwilitRealm/dusklight/pull/2089)" pull request by ZipoLabs.
 
-The result is `build/mods/<name>.dusk`. Copy it into the game's mods folder to try it:
+Existing Features:
 
-- Windows: `%APPDATA%\TwilitRealm\Dusklight\mods`
-- Linux: `~/.local/share/TwilitRealm/Dusklight/mods`
-- macOS: `~/Library/Application Support/TwilitRealm/Dusklight/mods`
+> Time synchronization. (obviously)
 
-During development, rebuild, copy and click **Reload** in the in-game mod manager to pick up changes.
+> Accelerated time-flow to "catch-up" to current real-world time.
 
-> [!IMPORTANT]
-> A mod built locally will only be valid for your own platform, and shouldn't be distributed.
-> The repository will build a [cross-platform bundle](#github-actions) for distribution. See below.
+> "Nothing happens..." when howling the Sun's Song.
 
-## Updating to a new Dusklight version
+New Features:
 
-Change the `DUSKLIGHT_VERSION` line in `CMakeLists.txt` to the new release tag (or commit hash) and reconfigure. The
-pinned version is fetched into `dusklight/` automatically. Use the `dusklight/` checkout to browse game code, headers
-and mod services.
+> Time is now retrieved using chrono. (Referenced directly from the device clock)
 
-> [!IMPORTANT]
-> The Dusklight checkout is for **reference only**. Mods use
-> [services](https://github.com/TwilitRealm/dusklight/blob/main/docs/modding.md#built-in-services) and
-> [hooks](https://github.com/TwilitRealm/dusklight/blob/main/docs/modding.md#hooking-game-functions) to interact with
-> game code.
+> Changing the device clock while Dusklight is running now updates the in-game time.
 
-## GitHub Actions
+> Time is now synchronized EVERYWHERE! Not just in areas where time flows normally.
 
-The included GitHub Actions workflow builds the mod for the following platforms:
-- Windows (AMD64 & ARM64)
-- macOS (Apple Silicon & Intel)
-- iOS (Apple Silicon)
-- Linux (x86_64 & aarch64)
-- Android (aarch64)
-
-It then merges the per-platform builds into a single `.dusk` supporting all platforms. (Artifact `mod-combined`) 
-
-Pushing a tag to the repository creates a GitHub release with the combined bundle.
-
-## For Dusklight developers
-
-Point the build at an existing checkout instead of fetching one:
-
-```sh
-cmake -B build -DDUSKLIGHT_DIR=~/path/to/dusklight
-```
+> Time stays synchronized even during dialogue, cutscenes and scene transitions.

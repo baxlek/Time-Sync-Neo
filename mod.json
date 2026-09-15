@@ -1,7 +1,7 @@
 {
-  "id": "com.example.my_mod",
-  "name": "My Mod",
-  "version": "1.0.0",
-  "author": "You",
-  "description": "An example Dusklight mod"
+  "id": "dev.baxlek.time_sync_neo",
+  "name": "Time Sync Neo",
+  "version": "1.2.2",
+  "author": "baxlek",
+  "description": "Synchronizes in-game time with the device clock. Based off of System Time Sync by ZipoLabs."
 }
