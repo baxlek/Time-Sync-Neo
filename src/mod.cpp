@@ -111,13 +111,10 @@ static daDemo00_c* g_demo00_suppressed_self = nullptr;
 // field_0x6b8: controls the branch in actPerformance that calls dComIfGs_setTime(pos.x * 15.0f).
 static u8 g_saved_demo00_field_0x6b8 = 0;
 
-// PRE hook: when the mod is enabled, zero field_0x6b8 so the branch that calls
+// PRE hook: zero field_0x6b8 so the branch that calls
 // dComIfGs_setTime(current.pos.x * 15.0f) is never taken during the cutscene.
 static HookAction on_act_performance_pre(ModContext*, void* args, void*, void*) {
     g_demo00_suppressed_self = nullptr;
-    if (!is_mod_enabled()) {
-        return HOOK_CONTINUE;
-    }
     daDemo00_c* self = mods::arg<daDemo00_c*>(args, 0);
     if (self == nullptr || self->field_0x6b8 == 0) {
         return HOOK_CONTINUE;
@@ -136,21 +133,18 @@ static void on_act_performance_post(ModContext*, void*, void*, void*) {
     }
 }
 
-// PRE hook: when the mod is enabled, skip dKy_instant_timechg entirely so that
-// scripted instant-time jumps (Sun's Song, event triggers, etc.) cannot override
-// the wall-clock time the mod is tracking.
+// PRE hook: skip dKy_instant_timechg entirely so that scripted instant-time jumps
+// (Sun's Song, event triggers, etc.) cannot override the wall-clock time the mod
+// is tracking.
 static HookAction on_instant_timechg_pre(ModContext*, void*, void*, void*) {
-    if (is_mod_enabled()) {
-        return HOOK_SKIP_ORIGINAL;
-    }
-    return HOOK_CONTINUE;
+    return HOOK_SKIP_ORIGINAL;
 }
 
 // POST hook: after dKy_Create runs for a new stage, it may have forced the
 // in-game time to a stage-header value (or restored an old_time from before
 // dark world). Re-apply the wall-clock time so the mod stays in sync.
 static void on_kankyo_create_post(ModContext*, void*, void*, void*) {
-    if (!is_mod_enabled() || dKy_darkworld_check()) {
+    if (dKy_darkworld_check()) {
         return;
     }
     const f32 wall_time = compute_wall_clock_daytime();
@@ -173,12 +167,9 @@ static u8 g_saved_kytag11_mInitTimeChange = 0;
 // mNewTime: the function skips the initial time-set when mNewTime == 0x1F (sentinel).
 // mEnvTime: controls the per-frame advancement delta; zero makes it a no-op.
 // mInitTimeChange is also saved and restored so the suppress does not permanently mark
-// the initial-set as done (which would prevent it from running if the mod is later disabled).
+// the initial-set as done on the actor instance.
 static HookAction on_kytag11_execute_pre(ModContext*, void* args, void*, void*) {
     g_kytag11_suppressed = nullptr;
-    if (!is_mod_enabled()) {
-        return HOOK_CONTINUE;
-    }
     kytag11_class* self = mods::arg<kytag11_class*>(args, 0);
     if (self == nullptr) {
         return HOOK_CONTINUE;
@@ -204,7 +195,7 @@ static void on_kytag11_execute_post(ModContext*, void*, void*, void*) {
 
 extern "C" {
 MOD_EXPORT ModResult mod_initialize(ModError*) {
-    ModResult result = mods::hook_add_post<SetDaytime>(svc_hook, on_set_daytime_post);
+    ModResult result = mods::hook::add_post<SetDaytime>(on_set_daytime_post);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_set_daytime_post");
         return result;
