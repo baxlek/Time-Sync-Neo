@@ -249,7 +249,7 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
         return result;
     }
 
-    result = mods::hook_add_post<SetDaytime>(svc_hook, on_set_daytime_post);
+    result = svc_hook->add_post<SetDaytime>(svc_hook, on_set_daytime_post);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_set_daytime_post");
         return result;
@@ -257,25 +257,25 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
 
     // Install the POST hook before the PRE hook: if POST fails, PRE is never
     // registered, so field_0x6b8 can never be zeroed without being restored.
-    result = mods::hook_add_post<ActPerformance>(svc_hook, on_act_performance_post);
+    result = svc_hook->add_post<ActPerformance>(svc_hook, on_act_performance_post);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_act_performance_post");
         return result;
     }
 
-    result = mods::hook_add_pre<ActPerformance>(svc_hook, on_act_performance_pre);
+    result = svc_hook->add_pre<ActPerformance>(svc_hook, on_act_performance_pre);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_act_performance_pre");
         return result;
     }
 
-    result = mods::hook_add_pre<InstantTimechg>(svc_hook, on_instant_timechg_pre);
+    result = svc_hook->add_pre<InstantTimechg>(svc_hook, on_instant_timechg_pre);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_instant_timechg_pre");
         return result;
     }
 
-    result = mods::hook_add_post<KankyoCreate>(svc_hook, on_kankyo_create_post);
+    result = svc_hook->add_post<KankyoCreate>(svc_hook, on_kankyo_create_post);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_kankyo_create_post");
         return result;
@@ -283,13 +283,13 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
 
     // Install the POST hook before the PRE hook: if POST fails, PRE is never
     // registered, so mNewTime/mEnvTime can never be zeroed without being restored.
-    result = mods::hook_add_post<Kytag11Execute>(svc_hook, on_kytag11_execute_post);
+    result = svc_hook->add_post<Kytag11Execute>(svc_hook, on_kytag11_execute_post);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_kytag11_execute_post");
         return result;
     }
 
-    result = mods::hook_add_pre<Kytag11Execute>(svc_hook, on_kytag11_execute_pre);
+    result = svc_hook->add_pre<Kytag11Execute>(svc_hook, on_kytag11_execute_pre);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_kytag11_execute_pre");
         return result;
