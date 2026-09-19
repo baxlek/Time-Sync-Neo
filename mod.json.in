@@ -1,7 +1,7 @@
 {
   "id": "dev.baxlek.time_sync_neo",
   "name": "Time Sync Neo",
-  "version": "1.2.3",
+  "version": "@PROJECT_VERSION@",
   "author": "baxlek",
   "description": "Synchronizes in-game time with the device clock. Based off of System Time Sync by ZipoLabs."
 }
