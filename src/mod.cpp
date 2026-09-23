@@ -1,6 +1,8 @@
 #include "mods/svc/hook.hpp"
 #include "mods/service.hpp"
+#include "mods/svc/config.h"
 #include "mods/svc/log.h"
+#include "mods/svc/ui.h"
 
 #include "d/actor/d_a_demo00.h"
 #include "d/actor/d_a_kytag11.h"
@@ -8,6 +10,7 @@
 #include "d/d_kankyo.h"
 #include "d/d_kankyo_static.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <ctime>
@@ -16,6 +19,13 @@ DEFINE_MOD();
 
 IMPORT_SERVICE(LogService, svc_log);
 IMPORT_SERVICE(HookService, svc_hook);
+IMPORT_SERVICE(ConfigService, svc_config);
+IMPORT_SERVICE(UiService, svc_ui);
+
+// Config var backing the "time offset" UI slider: added to the device clock's local hour before
+// wrapping into [0, 23]. Minutes and seconds always come straight from the device clock, so time
+// flow keeps tracking real time and hours advance normally as minutes/seconds roll over.
+static ConfigVarHandle g_cvar_time_offset_hours = 0;
 
 DEFINE_HOOK(&dScnKy_env_light_c::setDaytime, SetDaytime);
 DEFINE_HOOK(&daDemo00_c::actPerformance, ActPerformance);
@@ -44,9 +54,33 @@ static f32 compute_wall_clock_daytime() {
 #else
     localtime_r(&now_time, &local_time);
 #endif
-    return local_time.tm_hour * 15.0f +
+
+    int64_t offset_hours = 0;
+    svc_config->get_int(mod_ctx, g_cvar_time_offset_hours, &offset_hours);
+    offset_hours = std::clamp<int64_t>(offset_hours, -12, 12);
+
+    // Wrap the shifted hour into [0, 23]. Minutes and seconds are always the device clock's own,
+    // unshifted values, so they keep advancing with real time and roll the (offset) hour over
+    // normally at each boundary.
+    const int hour = static_cast<int>(((local_time.tm_hour + offset_hours) % 24 + 24) % 24);
+
+    return hour * 15.0f +
            local_time.tm_min * (15.0f / 60.0f) +
            local_time.tm_sec * (15.0f / 3600.0f);
+}
+
+// Builds the mod's panel in the host Mods window: a single Time Offset control (hours only,
+// -12 to +12, centered on 0) applied on top of the device clock.
+static ModResult build_time_override_panel(ModContext*, UiElementHandle panel, void*, ModError*) {
+    UiControlDesc control = UI_CONTROL_DESC_INIT;
+    control.kind = UI_CONTROL_NUMBER;
+    control.label = "Time Offset (Hours)";
+    control.binding = UI_BINDING_CONFIG_VAR;
+    control.config_var = g_cvar_time_offset_hours;
+    control.min = -12;
+    control.max = 12;
+    control.step = 1;
+    return svc_ui->pane_add_control(mod_ctx, panel, &control, nullptr);
 }
 
 static void on_set_daytime_post(ModContext*, void* args, void*, void*) {
@@ -238,6 +272,24 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
     result = mods::hook::add_pre<Kytag11Execute>(on_kytag11_execute_pre);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_kytag11_execute_pre");
+        return result;
+    }
+
+    ConfigVarDesc time_offset_desc = CONFIG_VAR_DESC_INIT;
+    time_offset_desc.name = "timeOffsetHours";
+    time_offset_desc.type = CONFIG_VAR_INT;
+    time_offset_desc.default_int = 0;
+    result = svc_config->register_var(mod_ctx, &time_offset_desc, &g_cvar_time_offset_hours);
+    if (result != MOD_OK) {
+        svc_log->error(mod_ctx, "failed to register timeOffsetHours cvar");
+        return result;
+    }
+
+    UiModsPanelDesc panel_desc = UI_MODS_PANEL_DESC_INIT;
+    panel_desc.build = build_time_override_panel;
+    result = svc_ui->register_mods_panel(mod_ctx, &panel_desc);
+    if (result != MOD_OK) {
+        svc_log->error(mod_ctx, "failed to register time_sync_neo mod panel");
         return result;
     }
 
