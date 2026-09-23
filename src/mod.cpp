@@ -1,6 +1,8 @@
 #include "mods/svc/hook.hpp"
 #include "mods/service.hpp"
+#include "mods/svc/config.h"
 #include "mods/svc/log.h"
+#include "mods/svc/ui.h"
 
 #include "d/actor/d_a_demo00.h"
 #include "d/actor/d_a_kytag11.h"
@@ -8,6 +10,7 @@
 #include "d/d_kankyo.h"
 #include "d/d_kankyo_static.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <ctime>
@@ -16,6 +19,16 @@ DEFINE_MOD();
 
 IMPORT_SERVICE(LogService, svc_log);
 IMPORT_SERVICE(HookService, svc_hook);
+IMPORT_SERVICE(ConfigService, svc_config);
+IMPORT_SERVICE(UiService, svc_ui);
+
+// Config vars backing the "time override" UI toggle: while enabled, the hour and minute used
+// for wall-clock sync come from g_cvar_time_override_hour/g_cvar_time_override_minute instead
+// of the device clock. Seconds always come from the device clock so time flow still tracks
+// real time.
+static ConfigVarHandle g_cvar_time_override_enabled = 0;
+static ConfigVarHandle g_cvar_time_override_hour = 0;
+static ConfigVarHandle g_cvar_time_override_minute = 0;
 
 DEFINE_HOOK(&dScnKy_env_light_c::setDaytime, SetDaytime);
 DEFINE_HOOK(&daDemo00_c::actPerformance, ActPerformance);
@@ -44,9 +57,77 @@ static f32 compute_wall_clock_daytime() {
 #else
     localtime_r(&now_time, &local_time);
 #endif
-    return local_time.tm_hour * 15.0f +
-           local_time.tm_min * (15.0f / 60.0f) +
+
+    int hour = local_time.tm_hour;
+    int minute = local_time.tm_min;
+
+    // When the time override is active, substitute the manually-selected hour/minute for the
+    // device clock's. Seconds are left untouched so time flow keeps synchronizing with
+    // real-time.
+    bool override_enabled = false;
+    if (svc_config->get_bool(mod_ctx, g_cvar_time_override_enabled, &override_enabled) == MOD_OK &&
+        override_enabled)
+    {
+        int64_t override_hour = 0;
+        int64_t override_minute = 0;
+        if (svc_config->get_int(mod_ctx, g_cvar_time_override_hour, &override_hour) == MOD_OK) {
+            hour = static_cast<int>(std::clamp<int64_t>(override_hour, 0, 23));
+        }
+        if (svc_config->get_int(mod_ctx, g_cvar_time_override_minute, &override_minute) == MOD_OK) {
+            minute = static_cast<int>(std::clamp<int64_t>(override_minute, 0, 59));
+        }
+    }
+
+    return hour * 15.0f +
+           minute * (15.0f / 60.0f) +
            local_time.tm_sec * (15.0f / 3600.0f);
+}
+
+// is_disabled predicate for the Hour/Minute controls: dimmed and non-interactive whenever the
+// time override toggle is off.
+static bool time_override_controls_disabled(ModContext*, void*) {
+    bool override_enabled = false;
+    svc_config->get_bool(mod_ctx, g_cvar_time_override_enabled, &override_enabled);
+    return !override_enabled;
+}
+
+// Builds the mod's panel in the host Mods window: a "Time Override" toggle followed by Hour and
+// Minute steppers that are only interactive while the toggle is on.
+static ModResult build_time_override_panel(ModContext*, UiElementHandle panel, void*, ModError*) {
+    UiControlDesc control = UI_CONTROL_DESC_INIT;
+    control.kind = UI_CONTROL_TOGGLE;
+    control.label = "Time Override";
+    control.binding = UI_BINDING_CONFIG_VAR;
+    control.config_var = g_cvar_time_override_enabled;
+    ModResult result = svc_ui->pane_add_control(mod_ctx, panel, &control, nullptr);
+    if (result != MOD_OK) {
+        return result;
+    }
+
+    control = UI_CONTROL_DESC_INIT;
+    control.kind = UI_CONTROL_NUMBER;
+    control.label = "Hour";
+    control.binding = UI_BINDING_CONFIG_VAR;
+    control.config_var = g_cvar_time_override_hour;
+    control.min = 0;
+    control.max = 23;
+    control.step = 1;
+    control.is_disabled = time_override_controls_disabled;
+    result = svc_ui->pane_add_control(mod_ctx, panel, &control, nullptr);
+    if (result != MOD_OK) {
+        return result;
+    }
+
+    control = UI_CONTROL_DESC_INIT;
+    control.kind = UI_CONTROL_NUMBER;
+    control.label = "Minute";
+    control.binding = UI_BINDING_CONFIG_VAR;
+    control.config_var = g_cvar_time_override_minute;
+    control.min = 0;
+    control.max = 59;
+    control.step = 1;
+    control.is_disabled = time_override_controls_disabled;
+    return svc_ui->pane_add_control(mod_ctx, panel, &control, nullptr);
 }
 
 static void on_set_daytime_post(ModContext*, void* args, void*, void*) {
@@ -238,6 +319,46 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
     result = mods::hook::add_pre<Kytag11Execute>(on_kytag11_execute_pre);
     if (result != MOD_OK) {
         svc_log->error(mod_ctx, "failed to install on_kytag11_execute_pre");
+        return result;
+    }
+
+    ConfigVarDesc override_enabled_desc = CONFIG_VAR_DESC_INIT;
+    override_enabled_desc.name = "timeOverrideEnabled";
+    override_enabled_desc.type = CONFIG_VAR_BOOL;
+    override_enabled_desc.default_bool = false;
+    result = svc_config->register_var(
+        mod_ctx, &override_enabled_desc, &g_cvar_time_override_enabled);
+    if (result != MOD_OK) {
+        svc_log->error(mod_ctx, "failed to register timeOverrideEnabled cvar");
+        return result;
+    }
+
+    ConfigVarDesc override_hour_desc = CONFIG_VAR_DESC_INIT;
+    override_hour_desc.name = "timeOverrideHour";
+    override_hour_desc.type = CONFIG_VAR_INT;
+    override_hour_desc.default_int = 0;
+    result = svc_config->register_var(mod_ctx, &override_hour_desc, &g_cvar_time_override_hour);
+    if (result != MOD_OK) {
+        svc_log->error(mod_ctx, "failed to register timeOverrideHour cvar");
+        return result;
+    }
+
+    ConfigVarDesc override_minute_desc = CONFIG_VAR_DESC_INIT;
+    override_minute_desc.name = "timeOverrideMinute";
+    override_minute_desc.type = CONFIG_VAR_INT;
+    override_minute_desc.default_int = 0;
+    result =
+        svc_config->register_var(mod_ctx, &override_minute_desc, &g_cvar_time_override_minute);
+    if (result != MOD_OK) {
+        svc_log->error(mod_ctx, "failed to register timeOverrideMinute cvar");
+        return result;
+    }
+
+    UiModsPanelDesc panel_desc = UI_MODS_PANEL_DESC_INIT;
+    panel_desc.build = build_time_override_panel;
+    result = svc_ui->register_mods_panel(mod_ctx, &panel_desc);
+    if (result != MOD_OK) {
+        svc_log->error(mod_ctx, "failed to register time_sync_neo mod panel");
         return result;
     }
 
