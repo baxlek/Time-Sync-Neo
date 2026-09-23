@@ -45,7 +45,13 @@ static bool should_sync_time(dScnKy_env_light_c* env_light) {
     return normal_time_progresses;
 }
 
-static f32 compute_wall_clock_daytime() {
+static int64_t read_time_offset_hours() {
+    int64_t offset_hours = 0;
+    svc_config->get_int(mod_ctx, g_cvar_time_offset_hours, &offset_hours);
+    return std::clamp<int64_t>(offset_hours, -12, 12);
+}
+
+static f32 compute_wall_clock_daytime(int64_t offset_hours) {
     const auto now = std::chrono::system_clock::now();
     const std::time_t now_time = std::chrono::system_clock::to_time_t(now);
     std::tm local_time {};
@@ -54,10 +60,6 @@ static f32 compute_wall_clock_daytime() {
 #else
     localtime_r(&now_time, &local_time);
 #endif
-
-    int64_t offset_hours = 0;
-    svc_config->get_int(mod_ctx, g_cvar_time_offset_hours, &offset_hours);
-    offset_hours = std::clamp<int64_t>(offset_hours, -12, 12);
 
     // Wrap the shifted hour into [0, 23]. Minutes and seconds are always the device clock's own,
     // unshifted values, so they keep advancing with real time and roll the (offset) hour over
@@ -68,6 +70,11 @@ static f32 compute_wall_clock_daytime() {
            local_time.tm_min * (15.0f / 60.0f) +
            local_time.tm_sec * (15.0f / 3600.0f);
 }
+
+// Tracks the last time-offset value that was applied, so a change to the offset can be detected
+// and snapped to immediately rather than being chased gradually by the catch-up logic below.
+static int64_t g_last_applied_offset_hours = 0;
+static bool g_offset_initialized = false;
 
 // Builds the mod's panel in the host Mods window: a single Time Offset control (hours only,
 // -12 to +12, centered on 0) applied on top of the device clock.
@@ -94,7 +101,20 @@ static void on_set_daytime_post(ModContext*, void* args, void*, void*) {
         return;
     }
 
-    const f32 calendar_daytime = compute_wall_clock_daytime();
+    const int64_t offset_hours = read_time_offset_hours();
+    const bool offset_changed = !g_offset_initialized || offset_hours != g_last_applied_offset_hours;
+    g_last_applied_offset_hours = offset_hours;
+    g_offset_initialized = true;
+
+    const f32 calendar_daytime = compute_wall_clock_daytime(offset_hours);
+
+    if (offset_changed) {
+        // The offset was just changed (or this is the first sync): snap straight to the new
+        // target instead of fast-forwarding through the catch-up logic below.
+        env_light->daytime = calendar_daytime;
+        dComIfGs_setTime(env_light->daytime);
+        return;
+    }
 
     f32 diff_daytime = calendar_daytime - env_light->daytime;
     if (diff_daytime < 0.0f) {
@@ -181,7 +201,7 @@ static void on_kankyo_create_post(ModContext*, void*, void*, void*) {
     if (dKy_darkworld_check()) {
         return;
     }
-    const f32 wall_time = compute_wall_clock_daytime();
+    const f32 wall_time = compute_wall_clock_daytime(read_time_offset_hours());
     g_env_light.daytime = wall_time;
     dComIfGs_setTime(wall_time);
 }
