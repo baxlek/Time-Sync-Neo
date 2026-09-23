@@ -22,13 +22,10 @@ IMPORT_SERVICE(HookService, svc_hook);
 IMPORT_SERVICE(ConfigService, svc_config);
 IMPORT_SERVICE(UiService, svc_ui);
 
-// Config vars backing the "time override" UI toggle: while enabled, the hour and minute used
-// for wall-clock sync come from g_cvar_time_override_hour/g_cvar_time_override_minute instead
-// of the device clock. Seconds always come from the device clock so time flow still tracks
-// real time.
-static ConfigVarHandle g_cvar_time_override_enabled = 0;
-static ConfigVarHandle g_cvar_time_override_hour = 0;
-static ConfigVarHandle g_cvar_time_override_minute = 0;
+// Config var backing the "time offset" UI slider: added to the device clock's local hour before
+// wrapping into [0, 23]. Minutes and seconds always come straight from the device clock, so time
+// flow keeps tracking real time and hours advance normally as minutes/seconds roll over.
+static ConfigVarHandle g_cvar_time_offset_hours = 0;
 
 DEFINE_HOOK(&dScnKy_env_light_c::setDaytime, SetDaytime);
 DEFINE_HOOK(&daDemo00_c::actPerformance, ActPerformance);
@@ -58,75 +55,31 @@ static f32 compute_wall_clock_daytime() {
     localtime_r(&now_time, &local_time);
 #endif
 
-    int hour = local_time.tm_hour;
-    int minute = local_time.tm_min;
+    int64_t offset_hours = 0;
+    svc_config->get_int(mod_ctx, g_cvar_time_offset_hours, &offset_hours);
+    offset_hours = std::clamp<int64_t>(offset_hours, -12, 12);
 
-    // When the time override is active, substitute the manually-selected hour/minute for the
-    // device clock's. Seconds are left untouched so time flow keeps synchronizing with
-    // real-time.
-    bool override_enabled = false;
-    if (svc_config->get_bool(mod_ctx, g_cvar_time_override_enabled, &override_enabled) == MOD_OK &&
-        override_enabled)
-    {
-        int64_t override_hour = 0;
-        int64_t override_minute = 0;
-        if (svc_config->get_int(mod_ctx, g_cvar_time_override_hour, &override_hour) == MOD_OK) {
-            hour = static_cast<int>(std::clamp<int64_t>(override_hour, 0, 23));
-        }
-        if (svc_config->get_int(mod_ctx, g_cvar_time_override_minute, &override_minute) == MOD_OK) {
-            minute = static_cast<int>(std::clamp<int64_t>(override_minute, 0, 59));
-        }
-    }
+    // Wrap the shifted hour into [0, 23]. Minutes and seconds are always the device clock's own,
+    // unshifted values, so they keep advancing with real time and roll the (offset) hour over
+    // normally at each boundary.
+    const int hour = static_cast<int>(((local_time.tm_hour + offset_hours) % 24 + 24) % 24);
 
     return hour * 15.0f +
-           minute * (15.0f / 60.0f) +
+           local_time.tm_min * (15.0f / 60.0f) +
            local_time.tm_sec * (15.0f / 3600.0f);
 }
 
-// is_disabled predicate for the Hour/Minute controls: dimmed and non-interactive whenever the
-// time override toggle is off.
-static bool time_override_controls_disabled(ModContext*, void*) {
-    bool override_enabled = false;
-    svc_config->get_bool(mod_ctx, g_cvar_time_override_enabled, &override_enabled);
-    return !override_enabled;
-}
-
-// Builds the mod's panel in the host Mods window: a "Time Override" toggle followed by Hour and
-// Minute steppers that are only interactive while the toggle is on.
+// Builds the mod's panel in the host Mods window: a single Time Offset control (hours only,
+// -12 to +12, centered on 0) applied on top of the device clock.
 static ModResult build_time_override_panel(ModContext*, UiElementHandle panel, void*, ModError*) {
     UiControlDesc control = UI_CONTROL_DESC_INIT;
-    control.kind = UI_CONTROL_TOGGLE;
-    control.label = "Time Override";
-    control.binding = UI_BINDING_CONFIG_VAR;
-    control.config_var = g_cvar_time_override_enabled;
-    ModResult result = svc_ui->pane_add_control(mod_ctx, panel, &control, nullptr);
-    if (result != MOD_OK) {
-        return result;
-    }
-
-    control = UI_CONTROL_DESC_INIT;
     control.kind = UI_CONTROL_NUMBER;
-    control.label = "Hour";
+    control.label = "Time Offset (Hours)";
     control.binding = UI_BINDING_CONFIG_VAR;
-    control.config_var = g_cvar_time_override_hour;
-    control.min = 0;
-    control.max = 23;
+    control.config_var = g_cvar_time_offset_hours;
+    control.min = -12;
+    control.max = 12;
     control.step = 1;
-    control.is_disabled = time_override_controls_disabled;
-    result = svc_ui->pane_add_control(mod_ctx, panel, &control, nullptr);
-    if (result != MOD_OK) {
-        return result;
-    }
-
-    control = UI_CONTROL_DESC_INIT;
-    control.kind = UI_CONTROL_NUMBER;
-    control.label = "Minute";
-    control.binding = UI_BINDING_CONFIG_VAR;
-    control.config_var = g_cvar_time_override_minute;
-    control.min = 0;
-    control.max = 59;
-    control.step = 1;
-    control.is_disabled = time_override_controls_disabled;
     return svc_ui->pane_add_control(mod_ctx, panel, &control, nullptr);
 }
 
@@ -322,35 +275,13 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
         return result;
     }
 
-    ConfigVarDesc override_enabled_desc = CONFIG_VAR_DESC_INIT;
-    override_enabled_desc.name = "timeOverrideEnabled";
-    override_enabled_desc.type = CONFIG_VAR_BOOL;
-    override_enabled_desc.default_bool = false;
-    result = svc_config->register_var(
-        mod_ctx, &override_enabled_desc, &g_cvar_time_override_enabled);
+    ConfigVarDesc time_offset_desc = CONFIG_VAR_DESC_INIT;
+    time_offset_desc.name = "timeOffsetHours";
+    time_offset_desc.type = CONFIG_VAR_INT;
+    time_offset_desc.default_int = 0;
+    result = svc_config->register_var(mod_ctx, &time_offset_desc, &g_cvar_time_offset_hours);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to register timeOverrideEnabled cvar");
-        return result;
-    }
-
-    ConfigVarDesc override_hour_desc = CONFIG_VAR_DESC_INIT;
-    override_hour_desc.name = "timeOverrideHour";
-    override_hour_desc.type = CONFIG_VAR_INT;
-    override_hour_desc.default_int = 0;
-    result = svc_config->register_var(mod_ctx, &override_hour_desc, &g_cvar_time_override_hour);
-    if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to register timeOverrideHour cvar");
-        return result;
-    }
-
-    ConfigVarDesc override_minute_desc = CONFIG_VAR_DESC_INIT;
-    override_minute_desc.name = "timeOverrideMinute";
-    override_minute_desc.type = CONFIG_VAR_INT;
-    override_minute_desc.default_int = 0;
-    result =
-        svc_config->register_var(mod_ctx, &override_minute_desc, &g_cvar_time_override_minute);
-    if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to register timeOverrideMinute cvar");
+        svc_log->error(mod_ctx, "failed to register timeOffsetHours cvar");
         return result;
     }
 
