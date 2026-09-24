@@ -10,18 +10,20 @@ Based off of the currently unmerged "[System Time Sync](https://github.com/Twili
 
 Existing Features:
 
-> Time synchronization. (obviously)
+* Time synchronization. (obviously)
 
-> Accelerated time-flow to "catch-up" to current real-world time.
+* Accelerated time-flow to "catch-up" to current real-world time.
 
-> "Nothing happens..." when howling the Sun's Song.
+* "Nothing happens..." when howling the Sun's Song.
 
 New Features:
 
-> Time is now retrieved using chrono. (Referenced directly from the device clock)
+* Time is now retrieved using chrono. (Referenced directly from the device clock)
 
-> Changing the device clock while Dusklight is running now updates the in-game time.
+* Changing the device clock while Dusklight is running now updates the in-game time.
 
-> Time is now synchronized EVERYWHERE! Not just in areas where time flows normally.
+* Time is now synchronized EVERYWHERE! Not just in areas where time flows normally.
 
-> Time stays synchronized even during dialogue, cutscenes and scene transitions.
+* Time stays synchronized even during dialogue, cutscenes and scene transitions.
+
+* Added a Time Offset slider to adjust time in-game.
