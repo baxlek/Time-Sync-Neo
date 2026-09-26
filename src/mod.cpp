@@ -1,7 +1,6 @@
 #include "mods/svc/hook.hpp"
 #include "mods/service.hpp"
 #include "mods/svc/config.h"
-#include "mods/svc/log.h"
 #include "mods/svc/ui.h"
 
 #include "d/actor/d_a_demo00.h"
@@ -17,7 +16,6 @@
 
 DEFINE_MOD();
 
-IMPORT_SERVICE(LogService, svc_log);
 IMPORT_SERVICE(HookService, svc_hook);
 IMPORT_SERVICE(ConfigService, svc_config);
 IMPORT_SERVICE(UiService, svc_ui);
@@ -251,7 +249,6 @@ extern "C" {
 MOD_EXPORT ModResult mod_initialize(ModError*) {
     ModResult result = mods::hook::add_post<SetDaytime>(on_set_daytime_post);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to install on_set_daytime_post");
         return result;
     }
 
@@ -259,25 +256,21 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
     // registered, so field_0x6b8 can never be zeroed without being restored.
     result = mods::hook::add_post<ActPerformance>(on_act_performance_post);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to install on_act_performance_post");
         return result;
     }
 
     result = mods::hook::add_pre<ActPerformance>(on_act_performance_pre);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to install on_act_performance_pre");
         return result;
     }
 
     result = mods::hook::add_pre<InstantTimechg>(on_instant_timechg_pre);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to install on_instant_timechg_pre");
         return result;
     }
 
     result = mods::hook::add_post<KankyoCreate>(on_kankyo_create_post);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to install on_kankyo_create_post");
         return result;
     }
 
@@ -285,13 +278,11 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
     // registered, so mNewTime/mEnvTime can never be zeroed without being restored.
     result = mods::hook::add_post<Kytag11Execute>(on_kytag11_execute_post);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to install on_kytag11_execute_post");
         return result;
     }
 
     result = mods::hook::add_pre<Kytag11Execute>(on_kytag11_execute_pre);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to install on_kytag11_execute_pre");
         return result;
     }
 
@@ -301,7 +292,6 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
     time_offset_desc.default_int = 0;
     result = svc_config->register_var(mod_ctx, &time_offset_desc, &g_cvar_time_offset_hours);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to register timeOffsetHours cvar");
         return result;
     }
 
@@ -309,11 +299,9 @@ MOD_EXPORT ModResult mod_initialize(ModError*) {
     panel_desc.build = build_time_override_panel;
     result = svc_ui->register_mods_panel(mod_ctx, &panel_desc);
     if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to register time_sync_neo mod panel");
         return result;
     }
 
-    svc_log->info(mod_ctx, "time_sync_neo initialized");
     return MOD_OK;
 }
 
@@ -322,7 +310,6 @@ MOD_EXPORT ModResult mod_update(ModError*) {
 }
 
 MOD_EXPORT ModResult mod_shutdown(ModError*) {
-    svc_log->info(mod_ctx, "time_sync_neo shutdown");
     return MOD_OK;
 }
 }
