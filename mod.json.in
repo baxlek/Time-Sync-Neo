@@ -1,5 +1,5 @@
 {
-  "id": "dev.baxlek.time_sync_neo",
+  "id": "com.baxlek.time_sync_neo",
   "name": "Time Sync Neo",
   "version": "@PROJECT_VERSION@",
   "author": "baxlek",
