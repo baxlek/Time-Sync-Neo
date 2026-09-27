@@ -1,7 +1,29 @@
 {
-  "id": "dev.baxlek.time_sync_neo",
+  "id": "com.baxlek.time_sync_neo",
   "name": "Time Sync Neo",
   "version": "@PROJECT_VERSION@",
   "author": "baxlek",
-  "description": "Synchronizes in-game time with the device clock. Based off of System Time Sync by ZipoLabs."
+  "description": "Synchronizes in-game time with the device clock. Based off of System Time Sync by ZipoLabs.",
+  "abi": 1,
+  "imports": [
+    {
+      "service_id": "dev.twilitrealm.dusklight.config",
+      "major": 1,
+      "min_minor": 0,
+      "optional": false
+    },
+    {
+      "service_id": "dev.twilitrealm.dusklight.hook",
+      "major": 1,
+      "min_minor": 1,
+      "optional": false
+    },
+    {
+      "service_id": "dev.twilitrealm.dusklight.ui",
+      "major": 1,
+      "min_minor": 2,
+      "optional": false
+    }
+  ],
+  "exports": []
 }
